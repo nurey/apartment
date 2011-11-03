@@ -143,7 +143,11 @@ module Apartment
       # 
 	    def import_database_schema
 	      ActiveRecord::Schema.verbose = false    # do not log schema load output.
-	      load_or_abort("#{Rails.root}/db/schema.rb")
+	      if ActiveRecord::Base.schema_format == :sql
+	        load_structure_or_abort("#{Rails.root}/db/structure.sql")
+	      else
+	        load_or_abort("#{Rails.root}/db/schema.rb")
+	      end
 	    end
 	    
 	    #   Return a new config that is multi-tenanted
@@ -159,6 +163,22 @@ module Apartment
       def load_or_abort(file)
         if File.exists?(file)
           load(file)
+        else
+          abort %{#{file} doesn't exist yet}
+        end
+      end
+      
+      #   Load a structure file or abort if it doesn't exists
+      # 
+      def load_structure_or_abort(file)
+        if File.exists?(file)
+          abcs = ActiveRecord::Base.configurations
+          env = ENV['RAILS_ENV'] || 'test'
+          ENV['PGHOST']     = abcs[env]['host'] if abcs[env]['host']
+          ENV['PGPORT']     = abcs[env]['port'].to_s if abcs[env]['port']
+          ENV['PGPASSWORD'] = abcs[env]['password'].to_s if abcs[env]['password']
+          ENV['PGUSER']     = abcs[env]['username'].to_s if abcs[env]['username']
+          `psql -v SEARCH_PATH=#{ActiveRecord::Base.connection.schema_search_path} -f #{file} #{abcs[env]['database']} #{abcs[env]['template']}`
         else
           abort %{#{file} doesn't exist yet}
         end
